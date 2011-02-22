@@ -4,11 +4,7 @@
 
 ;; should be a subclass of token? os have token?
 (defclass operator (token)
-  ((identifier :accessor identifier-of
-               :initarg :identifier)
-   (string :accerror string-of
-           :initarg :string))
-  )
+  ())
 
 (defmethod print-object ((object operator) stream)
   (print-unreadable-object (object stream :type t)
@@ -29,7 +25,7 @@
 (define-operator :and_if "&&")
 (define-operator :or_if "||")
 (define-operator :dsemi ";;")
-(define-oeprator :dless "<<")
+(define-operator :dless "<<")
 (define-operator :dgreat ">>")
 (define-operator :lessand "<&")
 (define-operator :greatand ">&")
@@ -37,24 +33,4 @@
 (define-operator :dlessdash "<<-")
 
 (define-operator :clobber ">|")
-
-;; (define-operator :if "if")
-;; (define-operator :then "then")
-;; (define-operator :else "else")
-;; (define-operator :elif "elif")
-;; (define-operator :fi "fi")
-;; (define-operator :do "do")
-;; (define-operator :done "done")
-
-;; (define-operator :case "case")
-;; (define-operator :esac "esac")
-;; (define-operator :while "while")
-;; (define-operator :until "until")
-;; (define-operator :for "for")
-
-;; (define-operator :lbrace "{")
-;; (define-operator :rbrace "}")
-;; (define-operator :bang "!")
-
-;; (define-operator :in "in")
 
