@@ -34,3 +34,11 @@
 
 (define-operator :clobber ">|")
 
+(defun operator-startswith (ch &optional (operators *operators*))
+  "return the list of operators starts with ch"
+  (remove-if-not #'(lambda (op)
+                     (char= ch (elt (string-of op) 0)))
+                 *operators*))
+
+(defun operator-successor (ch operators count)
+  )

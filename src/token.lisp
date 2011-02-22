@@ -6,10 +6,12 @@
 (defclass token ()
   ((string
     :initarg :string
+    :initform nil
     :accessor string-of
     :documentation "the original string of the token")
    (identifier
     :initarg :identifier
+    :initform nil
     :accessor identifier-of
     :documentation "the identifier of the token. it should be one of
 *token-identifiers*")))
