@@ -10,25 +10,26 @@
       (error 'unknown-debug-level :level level)
       (setq *debut-level* level)))
 
-(defun debug-format (level str &rest (args nil))
+(defun debug-format (level str &rest args)
   ;; output to *error-output*
   (if (member level *debug-levels*)
       (progn
         (format *error-output* (debug-level-format level))
-        (apply #'format *error-output* str args))
+        (apply #'format *error-output* str args)
+        (format *error-output* "~%"))
       (error 'unknown-debug-level :level level)))
 
 (defun debug-level-format (level)
   (case level
     (:verbose
-     "[verbose] ")
+     "[verbose]: ")
     (:debug
-     "[debug] ")
+     "[debug]: ")
     (:warning
-     "[warning] ")
+     "[warning]: ")
     (:error
-     "[error] ")
+     "[error]: ")
     (:fatal
-     "[fatal] ")
+     "[fatal]: ")
     (t
      (error 'unknown-debug-level :level level))))
