@@ -1,177 +1,163 @@
 (in-package :clsh)
 
-;;utility
-(defun chars= (ch &rest chars)
-  (if (null chars)
-      t
-      (and (char= ch (car chars))
-           (chars= ch (cdr chars)))))
 
-(defclass token-parser ()
-  ((token-stream :initform (make-string-output-stream)
-                 :accessor token-stream-of
-                 :documentation "a stream to store the characters for token")
-   (initialized :initform nil
-                :accessor initialized-of
-                :documentation "INITIALIZED will be T if token-parser begins
-to parse string.")
-   (quoted :initform nil
-           :accessor quoted-of
-           :documentation "QUATED will be T if token-parser begins to parse
-quoted string.")
-   (quoting-char :initform nil
-                 :accessor quoting-char-of
-                 :documentation "QUOTING-CHAR is a place holder of the
-character beginning quate")
-   (operator-candidates :initform nil
-                        :accessor operator-candidates-of
-                        :documentation "OPERATOR-CANDIDATES is used when
-parsing the operators. OPERATOR-CANDIDATES helds the candidates of the
-operators to be.")
-   (count :initform 0
-          :accessor count-of
-          :documentation "COUNT is a counter of the number of the characters
-of the token.")
-   (immediate-return-p :initform nil
-                       :accessor immediate-return-p-of
-                       :documentation "IMMEDIATE-RETURN-P may be T in ordder to
- convert token-parser to token."))
-  (:documentation
-   "this is a helper class for tokenization. token-parser is created to
-parse a token and never be reused."))
+(defclass command ()
+  ((tokens :initarg :tokens
+           :accessor tokens-of
+           :initform nil))
+  (:documentation "a container of tokens"))
 
-(defmethod has-operator-candidates-p ((parser token-parser))
-  (operator-candidates-of parser))
+(defmethod print-object ((object command) stream)
+  (print-unreadable-object (object stream :type t)
+    (format stream "[~A]"
+            (tokens-of object))))
 
-(defmethod quotedp ((parser token-parser))
-  (quoted-of parser))
+(defclass simple-command (command)
+  ())
 
-(defmethod initializedp ((parser token-parser))
-  (initialized-of parser))
+(defclass pipeline (command)
+  ())
 
-(defmethod immediate-return-p ((parser token-parser))
-  (immediate-return-p-of parser))
+(defclass list-command (command)
+  ())
 
-(defmethod token-parser->token ((parser token-parser))
-  (if (initializedp parser)
-      (make-token (get-output-stream-string (token-stream-of parser)))
-      nil))
+(defclass compound-command (command)
+  ())
 
-;; NB:
-(defmethod eof-process ((parser token-parser))
-  (debug-format :verbose "eof is detected")
-  (finish-parsing parser))
+(defclass function-definition (command)
+  ())
 
-(defmethod finish-parsing ((parser token-parser))
-  (debug-format :verbose "finish parsing")
-  (setf (immediate-return-p-of parser) t))
+(defclass redirection ()
+  ())
 
-(defmethod push-char ((parser token-parser) ch)
-  (write-char ch (token-stream-of parser))
-  (incf (count-of parser))
-  (setf (initialized-of parser) t)
-  ch)
+(defclass word-assignment ()
+  ())
 
-(defmethod operator-process ((parser token-parser) ch stream)
-  ;; 2, 3
-  (debug-format :verbose "processing operator")
-  (with-slots (operator-candidates count) parser
-    (let ((next-operators (operator-successor ch operator-candidates count)))
-      (if next-operators
-          (progn                        ;2
-            (debug-format :verbose "operator successing: ~A -> ~A"
-                          operator-candidates next-operators)
-            (setf operator-candidates next-operators)
-            (push-char parser ch))
-          (progn                        ;3
-            (unread-char ch stream)
-            (finish-parsing parser))))))
+(defmethod make-simple-command ((env environment)
+                                tokens redirections assignments)
+  ;; 1: variable assignments or rediections are saved for step 3 and 4
+  ;; 2: the words that are not variable assignments or redirections will
+  ;;    be expanded. first fieldwill be the command name and the rest will be
+  ;;    the arguments
+  ;; 3: redirection
+  ;; 4: variable assignment will be expanded for ~, parameter, command,
+  ;;    arithmetic
+  ;; fist of all, detect the delimiter of command: ; or NewLine
+  (make-instance 'simple-command :tokens tokens))
 
-(defmethod quote-process ((parser token-parser) ch)
-  (debug-format :verbose "begins quoting")
-  (setf (quoted-of parser) t)
-  (setf (quoting-char-of parser) ch))
-
-(defmethod beginning-operator-process ((parser token-parser) ch stream)
-  (debug-format :verbose "beigins operator")
-  (if (initializedp parser)
-      (progn
-        (unread-char ch stream)
-        (finish-parsing parser))
-      (progn
-        (setf (operator-candidates-of parser) (operator-startswith ch))
-        (debug-format :verbose "ch: ~A" ch)
-        (debug-format :verbose "candidates: ~A" (operator-candidates-of parser))
-        (push-char parser ch))))
-
-(defmethod newline-process ((parser token-parser))
-  (debug-format :verbose "unquoted newline")
-  (if (initializedp parser)
-      (finish-parsing parser))
-  ;; not initialized, dispose the character read and skip
-  t)
-
-(defmethod whitespace-process ((parser token-parser))
-  (debug-format :verbose "unquoted whitespace")
-  (if (initializedp parser)
-      (finish-parsing parser))
-  ;; not initialized, dispose the character read and skip
-  t)
-
-(defmethod comment-process ((parser token-parser) ch stream)
-  (debug-format :verbose "comment syntax is detected.")
-  (if (initializedp parser)
-      (progn
-        (unread-char ch stream)
-        (finish-parsing parser))
-      (loop for ch2 = (read-char stream nil :eof)
-           until (or (eq ch2 :eof)
-                     (char= ch2 #\NewLine))
-           finally (unread-char ch2 stream))))
-
-(defmethod expansion-process ((parser token-parser) ch stream)
+(yacc:define-parser *token-parser*
+  (:start-symbol command)
+  (:terminals (:word :assignment_word :newline :token :name :io_number
+                     :semicolon :ampasand :lparen :rparen :pipe))
+  (:precedence nil)
+  (complete_command
+   (list separator)
+   list)
+  (list
+   (list separator_op and_or)
+   and_or)
+  (and_or
+   pipeline
+   (and_or :and_if linebreak pipeline)
+   (and_or :or_if linebreak pipeline))
+  (pipeline
+   pipe_sequence
+   (:bang pipe_sequence))
+  (pipe_sequence
+   command
+   (pipe_sequence :pipe linebreak command))
+  (command
+   simple_command
+   compound_command
+   (compound_command redirect_list)
+   function_definition)
+  (compound_command
+   brace_group
+   subshell
+   for_clause
+   cause_clause
+   if_clause
+   while_clause
+   until_clause)
+  (subshell
+   (:lparen compound_list :rparen))
+  (compound_list
+   term
+   (newline_list term)
+   (term separator)
+   (newline_list term separator))
+  (term
+   (term separator and_or)
+   and_or)
+  (for_clause
+   (:for name linebreak do_group)
+   (:for name linebreak :in wordlist sequential_sep do_group))
+  (wordlist
+   (wordlist :word)
+   :word)
+  (simple_command
+   (cmd_prefix cmd_word cmd_suffix)
+   (cmd_prefix cmd_word)
+   cmd_prefix
+   (cmd_name cmd_suffix
+             #'(lambda (x y)
+                 (if (listp y)
+                     (let ((redirections
+                            (remove-if-not #'(lambda (x) (typep x 'redirection)) y))
+                           (cmd-args
+                            (remove-if #'(lambda (x) (typep x 'redirection)) y)))
+                       (make-simple-command *env* (cons x cmd-args)
+                                            redirections nil))
+                     (make-simple-command *env* (list x y) nil nil))))
+   (cmd_name #'(lambda (x)
+                 (make-simple-command *env* (list x) nil nil))))
+  (cmd_name :word)
+  (cmd_word :word)
+  (cmd_prefix
+   io_redirect
+   (cmd_prefix io_redirect)
+   :assignment_word
+   (cmd_prefix :assignment_word))
+  (cmd_suffix
+   io_redirect
+   (cmd_suffix io_redirect)
+   :word
+   (cmd_suffix :word))
+  (redirect_list
+   io_redirect
+   (redirect_list io_redirect))
+  (io_redirect
+   io_file
+   (:io_number io_file)
+   io_here
+   (:io_number io_here))
+  (separator_op
+   :ampasand :semicolon)
+  (separator
+   (separator_op linebreak)
+   newline_list)
+  (sequential_sep
+   (:semicolon linebreak)
+   newline_list)
   )
 
-(defmacro while (test &rest args)
-  `(loop
-      while ,test
-      do (progn ,@args)))
-
-(defun read-token (stream)
-  "return a token instance.
-
-this is an implementation of below:
-http://pubs.opengroup.org/onlinepubs/007908799/xcu/chap2.html#tag_001_003"
-  (debug-format :verbose "read-token is called")
-  (let ((ch nil)
-        (parser (make-instance 'token-parser)))
-    (while t
-      (setq ch (read-char stream nil :eof))
-      (debug-format :verbose "ch: ~A" ch)
-      (cond ((eq ch :eof)               ;1, eof
-             (eof-process parser))
-            ((has-operator-candidates-p parser) ;2, 3, operator
-             (operator-process parser ch stream))
-            ((and (not (quotedp parser)) (chars= ch #\\ #\' #\")) ;4, quoting
-             (quote-process parser ch))
-            ((and (not (quotedp parser)) (chars= ch #\$ #\`)) ;5, expansion
-             (expansion-process parser ch stream))
-            ((and (not (quotedp parser)) ;6, the beginning of operators
-                  (operator-startswith ch))
-             (beginning-operator-process parser ch stream))
-            ((and (not (quotedp parser)) (char= ch #\NewLine)) ;7, newline
-             (newline-process parser))
-            ((and (not (quotedp parser)) (clap:whitespacep ch)) ;8, space
-             (whitespace-process parser))
-            ((char= ch #\#)             ;10, comment
-             (comment-process parser ch stream))
-            ((initializedp parser)      ;9
-             (debug-format :verbose "adding ~A into word" ch)
-             (push-char parser ch))
-            ((standard-char-p ch)       ;11, the beginning of word
-             (debug-format :verbose "begining new word from ~A" ch)
-             (push-char parser ch))
-            (t (error 'clsh-bug)))
-      (if (immediate-return-p parser)
-          (return-from read-token (token-parser->token parser))))))
-
+(defun list-lexr (tokens)
+  #'(lambda ()
+      (let ((value (pop tokens)))
+        (if (null value)
+            (values nil nil)
+            (let ((terminal (cond
+                              ((reserved-word-p value)
+                               (reserved-word-identifier-of value))
+                              ((eq (identifier-of value) :word)
+                               (let ((s (string-of value)))
+                                 (cond
+                                   ((string= s "&") :ampasand)
+                                   ((string= s ";") :semicolon)
+                                   ((string= s "(") :lparen)
+                                   ((string= s ")") :rparen)
+                                   ((string= s "|") :pipe)
+                                   (t :word))))
+                              (t
+                               (identifier-of value)))))
+              (values terminal value))))))

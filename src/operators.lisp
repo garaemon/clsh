@@ -8,7 +8,7 @@
 
 (defmethod print-object ((object operator) stream)
   (print-unreadable-object (object stream :type t)
-    (format stream "operator: ~A [~A]"
+    (format stream "operator: ~A [~s]"
             (identifier-of object) (string-of object))))
 
 (defmacro define-operator (sym string)
@@ -16,7 +16,7 @@
     `(let ((,op (make-instance 'operator
                                :identifier ,sym
                                :string ,string)))
-       (if (not (member ,op *operators*
+       (if (not (member ,sym *operators*
                         :test #'eq
                         :key #'identifier-of))
            (push ,op *operators*))
@@ -41,4 +41,9 @@
                  *operators*))
 
 (defun operator-successor (ch operators count)
-  )
+  (remove-if-not #'(lambda (op)
+                     (let ((string (string-of op)))
+                       (if (> (length string) count)
+                           (char= ch (elt string count))
+                           nil)))
+                 operators))

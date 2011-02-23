@@ -40,3 +40,9 @@
 
 (define-reserved-word :in "in")
 
+(defmethod reserved-word-p ((word reserved-word))
+  t)
+
+(defmethod reserved-word-p ((word t))
+  nil)
+

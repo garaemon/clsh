@@ -18,3 +18,11 @@
   (:documentation
    "this is a condition signaled when unconsidered case"))
 
+(define-condition syntax-error (simple-error)
+  ((err-str :reader syntax-error-err-str
+            :initarg :err-str))
+  (:report
+   (lambda (c s)
+     (format s "syntax error: ~A" (syntax-error-err-str c))))
+  (:documentation
+   "this is a condition signaled when syntax error is detected"))
