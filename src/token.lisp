@@ -43,12 +43,25 @@
      (make-instance 'token :string string :identifier :newline))
     (t                                  ;no hint
      (debug-format :verbose "no hint processing ~s" string)
-     ;; NB: 
-     (let ((reserved-wordp (find string *reserved-words* :key #'string-of)))
-       (if reserved-wordp
-           reserved-wordp
-           (make-instance 'token :string string :identifier :word))))
-     ))
+     (cond ((= (clap:find string "=") -1)
+            ;;7a: if string does not contain =, 1 will be applied
+            (let ((reserved-wordp (find string *reserved-words* :key #'string-of)))
+              ;; NB: should be context dependent?
+              (if reserved-wordp
+                  reserved-wordp
+                  (make-instance 'token :string string :identifier :word))))
+           ((clap:startswith string "=")
+            ;;7b-1: if string starts with =, WORD will be returned
+            (make-instance 'token :string string :identifier :word))
+           (t
+            ;; 7B-2: check if the characters preceding = is a valid name
+            (multiple-value-bind (preceding separator following)
+                (clap:partition string "=")
+              (if (valid-name-p preceding)
+                  (make-instance 'token :string string
+                                 :identifier :assignment_word)
+                  (make-instance 'token :string string ;implementation dependent
+                                 :identifier :word))))))))
 
 (defmethod make-token ((stream stream) &optional (hint nil))
   "make a token from string output stream"

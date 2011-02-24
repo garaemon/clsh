@@ -152,6 +152,7 @@ sequential_sep   : ';' linebreak
          (mapcar #'(lambda (x) (word-expansion env x)) tokens)))
     (debug-format :debug "before expanded tokens => ~A" tokens)
     (debug-format :debug "expanded-tokens => ~A" expanded-tokens)
+    (execute-tokens env expanded-tokens)
     expanded-tokens))
 
 (yacc:define-parser *token-parser*
