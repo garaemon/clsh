@@ -5,7 +5,7 @@
   ;; return a word or a list of the words
   (let ((tilde (tilde-expansion env word)))
     (let ((param (parameter-expansion env tilde)))
-      (let ((com (command-substitusion env param)))
+      (let ((com (command-substitution env param)))
         (let ((arth (arithmetic-expansion env com)))
           arth)))))
 
@@ -143,15 +143,17 @@ READ-TILDE-SUFFIX returns :quoted if it finds a quoting character."
         (make-instance 'token :identifier id
                        :string (get-output-stream-string output))))))
 
-(defmethod command-substitusion ((env environment) (words list))
-  (mapcar #'(lambda (x) (command-substitusion env x)) words))
+(defmethod command-substitution ((env environment) (words list))
+  (mapcar #'(lambda (x) (command-substitution env x)) words))
 
-(defmethod command-substitusion ((env environment) (word token))
+(defmethod command-substitution ((env environment) (word token))
+  (debug-format :debug "command-substitution is not implemented")
   word)
 
 (defmethod arithmetic-expansion ((env environment) (words list))
   (mapcar #'(lambda (x) (arithmetic-expansion env x)) words))
 
 (defmethod arithmetic-expansion ((env environment) (word token))
+  (debug-format :debug "arithmetic-expansion is not implemented")
   word)
 
