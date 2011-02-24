@@ -26,3 +26,21 @@
      (format s "syntax error: ~A" (syntax-error-err-str c))))
   (:documentation
    "this is a condition signaled when syntax error is detected"))
+
+(define-condition unknown-user (simple-error)
+  ((user :reader unknown-user-user
+         :initarg :user))
+  (:report
+   (lambda (c s)
+     (format s "unknown user: ~A" (unknown-user-user c))))
+  (:documentation
+   "this a condition signaled when unknown user name is specified in
+tilda expansion"))
+
+(define-condition not-implemented (simple-error)
+  ()
+  (:report
+   (lambda (c s)
+     (format s "now implemented yet")))
+  (:documentation
+   "this is a condition signaled when a user use the not implemented functions"))

@@ -166,7 +166,8 @@ parse a token and never be reused."))
 ;; NB:
 (defmethod quote-process ((parser tokenizer) ch stream)
   (setf (quoted-of parser) t)
-  (setf (quoting-char-of parser) ch))
+  (setf (quoting-char-of parser) ch)
+  (push-char parser ch))
 
 ;; NB: nested syntax is not supported!
 (defmethod read-until ((parser tokenizer) end-string stream)
@@ -179,7 +180,7 @@ parse a token and never be reused."))
        do (error 'syntax-error :err-str (format nil "mismatch ~A" end-string))
        else 
        do (progn
-            (debug-format :verbose "ch -> ~A" ch)
+            (debug-format :verbose "ch -> ~s" ch)
             (write-char ch output)
             (let ((string (get-output-stream-string output)))
               ;; it will clear OUPUT stream
