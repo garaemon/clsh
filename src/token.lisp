@@ -75,3 +75,10 @@
 
 (defmethod newline-token-p ((token token))
   (eq (identifier-of token) :newline))
+
+(defmethod assignment-word-p ((token token))
+  (eq (identifier-of token) :assignment_word))
+
+;; NB: OK?
+(defmethod io-redirect-p ((token token))
+  (eq (identifier-of token) :io_redirect))

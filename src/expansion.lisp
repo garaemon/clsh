@@ -11,7 +11,8 @@
 
 ;; backslash-escape-p not supported
 (defun copy-stream-until (input-stream output-stream ends-strings
-                          &key (backslash-escape-p nil))
+                          &key (backslash-escape-p nil)
+                               (dispose-end-p nil))
   (let ((output (make-string-output-stream)))
     (loop
        for ch = (read-char input-stream nil :eof)
@@ -20,12 +21,19 @@
             (debug-format :verbose "ch -> ~s" ch)
             (write-char ch output)
             (let ((string (get-output-stream-string output)))
-              (if (find-if #'(lambda (x) (clap:endswith string x))
-                           ends-strings)
+              (if (find-if #'(lambda (x) (clap:endswith string x)) ends-strings)
                   (progn
-                    (format output-stream string)
-                    (return string))
-                  (format output string)))))
+                    (if (not dispose-end-p)
+                        (write-string string output-stream)
+                        (let ((matched-end (find-if #'(lambda (x)
+                                                        (clap:endswith string x))
+                                                    ends-strings)))
+                          (let ((preceding (subseq string 0
+                                                   (- (length string)
+                                                      (length matched-end)))))
+                            (write-string preceding output-stream))))
+                    (return string))    ;finish loop
+                  (write-string string output)))))
     (format output-stream (get-output-stream-string output))))
 
 (defun read-tilde-suffix (input)
@@ -102,12 +110,123 @@ READ-TILDE-SUFFIX returns :quoted if it finds a quoting character."
 (defmethod parameter-expansion ((env environment) (words list))
   (mapcar #'(lambda (x) (parameter-expansion env x)) words))
 
-(defmethod resolve-parameter ((env environment) var)
-  (debug-format :verbose "lookup ~A" var)
-  (getenv env var))                     ;NB: what will happen if lookup undefined variable?
+(defmacro with-partition-braced-parameter ((preceding split follow)
+                                           (braced-string splitter)
+                                           &rest args)
+  `(multiple-value-bind
+         (,preceding ,split ,follow)
+       (clap:partition ,braced-string ,splitter)
+     (debug-format :verbose "preceding: ~A" ,preceding)
+     (debug-format :verbose "follow: ~A" ,follow)
+     (if (string= ,preceding "")
+         (error 'bad-substitution :string
+                (format nil "${~A}" ,braced-string)))
+     ,@args))
+
+(defmethod use-default-values-expansion ((env environment) braced-string
+                                         &key (without-colon nil))
+  (with-partition-braced-parameter
+      (preceding split follow)
+    (braced-string (if without-colon "-" ":-"))
+    (let ((value
+           (resolve-parameter env preceding
+                              :unset-return-value
+                              (if without-colon nil ""))))
+      (if (or (and without-colon (null value))
+              (and (not without-colon) (string= value "")))
+          follow
+          value))))
+
+(defmethod assign-default-values-expansion ((env environment) braced-string
+                                            &key (without-colon nil))
+  (with-partition-braced-parameter
+      (preceding split follow)
+    (braced-string (if without-colon "=" ":="))
+    (let ((value
+           (resolve-parameter env preceding
+                              :unset-return-value
+                              (if without-colon nil ""))))
+      (if (or (and without-colon (null value))
+              (and (not without-colon) (string= value "")))
+          (progn
+            (set-parameter env preceding follow)
+            follow)
+          value))))
+
+(defmethod indicate-error-expansion ((env environment) braced-string
+                                     &key (without-colon nil))
+  (with-partition-braced-parameter
+      (preceding split follow)
+    (braced-string (if without-colon "?" ":?"))
+    (let ((value
+           (resolve-parameter env preceding
+                              :unset-return-value
+                              (if without-colon nil ""))))
+      (if (or (and without-colon (null value))
+              (and (not without-colon) (string= value "")))
+          ;; raise an error
+          (if (string= follow "")
+              (error 'parameter-not-set :parameter preceding)
+              (error 'parameter-not-set :parameter preceding :word follow))
+          value))))
+
+(defmethod use-alternative-value-expansion ((env environment) braced-string
+                                            &key (without-colon nil))
+  (with-partition-braced-parameter
+      (preceding split follow)
+    (braced-string (if without-colon "+" ":+"))
+    (let ((value
+           (resolve-parameter env preceding
+                              :unset-return-value
+                              (if without-colon nil ""))))
+      (if (or (and without-colon (null value))
+              (and (not without-colon) (string= value "")))
+          ""
+          follow))))
+
+(defmethod string-length-expansion ((env environment) braced-string)
+  (let ((parameter (resolve-parameter env (subseq braced-string 1))))
+    (clap:str (length parameter))))
 
 (defmethod braced-parameter-expansion ((env environment) input)
-  (error 'not-implemented))
+  ;; extract the string within the braces
+  (let ((braced-string
+         (with-output-to-string (output)
+           (copy-stream-until input output '("}") :dispose-end-p t))))
+    (debug-format :verbose "braced-string: ~A" braced-string)
+    (if (= (length braced-string) 0)
+        (error 'bad-substitution :string (format nil "${~A}" braced-string)))
+    (cond ; check the type of braced-string
+      ((not (= (clap:find braced-string ":-") -1)) ; ${parameter:-word}
+       (use-default-values-expansion env braced-string))
+      ((not (= (clap:find braced-string "-") -1)) ; ${parameter-word}
+       (use-default-values-expansion env braced-string :without-colon t))
+      ((not (= (clap:find braced-string ":=") -1)) ; ${parameter:=word}
+       (assign-default-values-expansion env braced-string))
+      ((not (= (clap:find braced-string "=") -1)) ; ${parameter=word}
+       (assign-default-values-expansion env braced-string :without-colon t))
+      ((not (= (clap:find braced-string ":?") -1)) ; ${parameter:?[word]}
+       (indicate-error-expansion env braced-string))
+      ((not (= (clap:find braced-string "?") -1)) ; ${parameter?[word]}
+       (indicate-error-expansion env braced-string :without-colon t))
+      ((not (= (clap:find braced-string ":+") -1)) ; ${parameter:+word}
+       (use-alternative-value-expansion env braced-string))
+      ((not (= (clap:find braced-string "+") -1)) ; ${parameter+word}
+       (use-alternative-value-expansion env braced-string :without-colon t))
+      ((clap:startswith braced-string "#") ; ${#parameter}
+       (string-length-expansion env braced-string))
+      ;; followings are not implemented,
+      ;; because we need to implement pattern match
+      ((not (= (clap:find braced-string "%%") -1)) ; ${parameter%%word}
+       (remove-largest-suffix-pattern-expansion env braced-string))
+      ((not (= (clap:find braced-string "%") -1)) ; ${parameter%word}
+       (remove-smallest-suffix-pattern-expansion env braced-string))
+      ((not (= (clap:find braced-string "##") -1)) ; ${parameter##word}
+       (remove-largest-prefix-pattern-expansion env braced-string))
+      ((not (= (clap:find braced-string "#") -1)) ; ${parameter#word}
+       (remove-smallest-prefix-pattern-expansion env braced-string))
+      (t                                ;${parameter}
+       (resolve-parameter env braced-string)))))
 
 (defmethod parameter-expansion ((env environment) (word token))
   (debug-format :verbose "parameter expansion for: ~A" word)
@@ -130,7 +249,9 @@ READ-TILDE-SUFFIX returns :quoted if it finds a quoting character."
                 (cond ((eq ch2 :eof)  ;$
                        (write-char ch output))
                       ((char= ch2 #\{) ;${HOGE}
-                       (braced-parameter-expansion env token-stream))
+                       (let ((replace
+                              (braced-parameter-expansion env token-stream)))
+                         (write-string replace output)))
                       (t              ;$HOGE
                        (unread-char ch2 token-stream)
                        ;; scan the possible longest name

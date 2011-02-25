@@ -44,3 +44,27 @@ tilda expansion"))
      (format s "now implemented yet")))
   (:documentation
    "this is a condition signaled when a user use the not implemented functions"))
+
+(define-condition bad-substitution (simple-error)
+  ((string :reader bad-substitution-string
+           :initarg :string))
+  (:report
+   (lambda (c s)
+     (format s "~A: bad substitution" (bad-substitution-string c))))
+  (:documentation
+   "this is a condition signaled when a bad substitution is detected"))
+
+(define-condition parameter-not-set (simple-error)
+  ((word :initarg :word
+         :accessor parameter-not-set-word
+         :initform "parameter null or not set")
+   (parameter :initarg :parameter
+              :accessor parameter-not-set-parameter))
+  (:report
+   (lambda (c s)
+     (format s "~A: ~A"
+             (parameter-not-set-parameter c)
+             (parameter-not-set-word c))))
+  (:documentation
+   "this is a condition signaled when ${parameter:?[word]} "))
+

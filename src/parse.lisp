@@ -146,14 +146,24 @@ sequential_sep   : ';' linebreak
                  ;
 |#
 
-(defmethod exec-simple-command ((env environment) tokens
-                                redirections assignments)
+(defmethod %exec-simple-command ((env environment) tokens
+                                 redirections assignments)
   (let ((expanded-tokens
          (mapcar #'(lambda (x) (word-expansion env x)) tokens)))
     (debug-format :debug "before expanded tokens => ~A" tokens)
     (debug-format :debug "expanded-tokens => ~A" expanded-tokens)
     (execute-tokens env expanded-tokens)
     expanded-tokens))
+
+(defmethod exec-simple-command ((env environment)
+                                cmd-prefix cmd-words cmd-suffix)
+  (multiple-value-bind
+        (words io-redirects assignment-words)
+      (simple-command-split cmd-prefix cmd-words cmd-suffix)
+    (debug-format :verbose "words: ~A" words)
+    (debug-format :verbose "io-redirects: ~A" io-redirects)
+    (debug-format :verbose "assignment-words: ~A" assignment-words)
+    (%exec-simple-command env words io-redirects assignment-words)))
 
 (yacc:define-parser *token-parser*
   (:start-symbol command)
@@ -206,21 +216,13 @@ sequential_sep   : ';' linebreak
    (wordlist :word)
    :word)
   (simple_command
-   (cmd_prefix cmd_word cmd_suffix)
-   (cmd_prefix cmd_word)
-   cmd_prefix
-   (cmd_name cmd_suffix
-             #'(lambda (x y)
-                 (if (listp y)
-                     (let ((redirections
-                            (remove-if-not #'(lambda (x) (typep x 'redirection)) y))
-                           (cmd-args
-                            (remove-if #'(lambda (x) (typep x 'redirection)) y)))
-                       (exec-simple-command *env* (cons x cmd-args)
-                                            redirections nil))
-                     (exec-simple-command *env* (list x y) nil nil))))
-   (cmd_name #'(lambda (x)
-                 (exec-simple-command *env* (list x) nil nil))))
+   (cmd_prefix cmd_word cmd_suffix
+               #'(lambda (x y z) (exec-simple-command *env* x y z)))
+   (cmd_prefix cmd_word
+               #'(lambda (x y) (exec-simple-command *env* x y nil)))
+   (cmd_prefix #'(lambda (x) (exec-simple-command *env* x nil nil)))
+   (cmd_name cmd_suffix #'(lambda (x y) (exec-simple-command *env* nil x y)))
+   (cmd_name #'(lambda (x) (exec-simple-command *env* nil x nil))))
   (cmd_name :word)
   (cmd_word :word)
   (cmd_prefix
@@ -271,3 +273,26 @@ sequential_sep   : ';' linebreak
                               (t
                                (identifier-of value)))))
               (values terminal value))))))
+
+(defun simple-command-split (cmd-prefix cmd-words cmd-suffix)
+  ;; from shell grammer:
+  ;; cmd-prefix -> a list of io_redirects and assignment_words or atom of it
+  ;; cmd-suffix -> a list of words and io_redirects or atom of it
+  (let ((cmd-prefix-list (if (and (atom cmd-prefix)
+                                  (not (null cmd-prefix)))
+                             (list cmd-prefix) cmd-prefix))
+        (cmd-suffix-list (if (and (atom cmd-suffix)
+                                  (not (null cmd-suffix)))
+                             (list cmd-suffix) cmd-suffix)))
+    (debug-format :verbose "cmd-prefix: ~A" cmd-prefix-list)
+    (debug-format :verbose "cmd-suffix: ~A" cmd-suffix-list)
+    (let* ((io-redirects (remove-if-not
+                          #'io-redirect-p
+                          (append cmd-prefix-list cmd-suffix-list)))
+           (assignment-words (remove-if-not #'assignment-word-p
+                                            cmd-prefix-list))
+           (words (append (if (atom cmd-words)
+                              (list cmd-words) cmd-words)
+                          (clap:difference cmd-suffix-list
+                                           io-redirects))))
+      (values words io-redirects assignment-words))))

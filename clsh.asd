@@ -12,7 +12,7 @@
                (:file "environment" :depends-on ("clsh" "debug"))
                (:file "operators" :depends-on ("token"))
                (:file "reserved-words" :depends-on ("token"))
-               (:file "tokenize" :depends-on ("clsh" "debug"))
+               (:file "tokenize" :depends-on ("clsh" "debug" "token"))
                (:file "parse" :depends-on ("clsh" "tokenize" "environment"))
                (:file "expansion" :depends-on ("clsh" "tokenize" "environment"))
                (:file "command" :depends-on ("clsh" "environment"))
