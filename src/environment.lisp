@@ -7,6 +7,9 @@
    (variables :accessor variables-of
               :initarg :variables
               :initform (clap:dict))
+   (shell-functions :accessor shell-functions-of
+                    :initarg :shell-functions
+                    :initform nil)
    (aliases :accessor aliases-of
             :initarg :aliases
             :initform (clap:dict))))
@@ -20,7 +23,8 @@
 
 (defvar *env* (make-top-environment))
 
-(defmethod resolve-parameter ((env environment) var &key (unset-return-value ""))
+(defmethod resolve-parameter
+    ((env environment) var &key (unset-return-value ""))
   (debug-format :verbose "lookup ~A" var)
   (let ((ret (clap:lookup (variables-of env) var)))
     (if ret ret unset-return-value)))

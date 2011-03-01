@@ -16,5 +16,5 @@
                (:file "parse" :depends-on ("clsh" "tokenize" "environment"))
                (:file "expansion" :depends-on ("clsh" "tokenize" "environment"))
                (:file "command" :depends-on ("clsh" "environment"))
-               (:file "execute" :depends-on ("clsh" "token" "environment"))
+               (:file "builtin-command" :depends-on ("command"))
                ))))
