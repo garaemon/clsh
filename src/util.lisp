@@ -13,3 +13,7 @@
             return nil
             finally (return t))))
 
+(defun list-concatenate (x y)
+  (if (listp x)
+      (append x (list y))
+      (list x y)))

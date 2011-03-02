@@ -17,4 +17,5 @@
                (:file "expansion" :depends-on ("clsh" "tokenize" "environment"))
                (:file "command" :depends-on ("clsh" "environment"))
                (:file "builtin-command" :depends-on ("command"))
+               (:file "utility-command" :depends-on ("command"))
                ))))

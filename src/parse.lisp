@@ -152,8 +152,14 @@ sequential_sep   : ';' linebreak
          (mapcar #'(lambda (x) (word-expansion env x)) tokens)))
     (debug-format :debug "before expanded tokens => ~A" tokens)
     (debug-format :debug "expanded-tokens => ~A" expanded-tokens)
-    (execute-tokens env expanded-tokens)
-    expanded-tokens))
+    ;; before executing tokens, resolve assignments and redirections
+    ;; 1. resolve redirections
+    ;; 2. resolve assignments
+    (if expanded-tokens 
+        (let ((execute-env (derive-environment-with-assignments
+                            env assignments)))
+          (execute-tokens execute-env expanded-tokens))
+        (update-environment-with-assignments env assignments))))
 
 (defmethod exec-simple-command ((env environment)
                                 cmd-prefix cmd-words cmd-suffix)
@@ -227,14 +233,14 @@ sequential_sep   : ';' linebreak
   (cmd_word :word)
   (cmd_prefix
    io_redirect
-   (cmd_prefix io_redirect)
+   (cmd_prefix io_redirect #'list-concatenate)
    :assignment_word
-   (cmd_prefix :assignment_word))
+   (cmd_prefix :assignment_word #'list-concatenate))
   (cmd_suffix
    io_redirect
-   (cmd_suffix io_redirect)
+   (cmd_suffix io_redirect #'list-concatenate)
    :word
-   (cmd_suffix :word))
+   (cmd_suffix :word #'list-concatenate))
   (redirect_list
    io_redirect
    (redirect_list io_redirect))
@@ -291,8 +297,8 @@ sequential_sep   : ';' linebreak
                           (append cmd-prefix-list cmd-suffix-list)))
            (assignment-words (remove-if-not #'assignment-word-p
                                             cmd-prefix-list))
-           (words (append (if (atom cmd-words)
+           (words (append (if (and (atom cmd-words)
+                                   (not (null cmd-words)))
                               (list cmd-words) cmd-words)
-                          (clap:difference cmd-suffix-list
-                                           io-redirects))))
+                          (clap:difference cmd-suffix-list io-redirects))))
       (values words io-redirects assignment-words))))
